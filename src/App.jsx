@@ -66,12 +66,21 @@ async function fetchJiraTickets({ email, token, project, maxResults }) {
   const fCnpj = find("cnpj");
   const fAny  = find("anydesk");
 
-  const fieldIds = ["summary","status","created", fNome, fTel, fCnpj, fAny].filter(Boolean).join(",");
+  const fieldIds = ["summary","status","created", fNome, fTel, fCnpj, fAny].filter(Boolean);
 
   let allIssues = [], startAt = 0, total = Infinity;
   while (allIssues.length < maxResults && allIssues.length < total) {
-    const jql = encodeURIComponent(`project = ${project} ORDER BY created DESC`);
-    const res = await fetch(`/api/jira/rest/api/3/search?jql=${jql}&startAt=${startAt}&maxResults=100&fields=${fieldIds}`, { headers });
+    // USA POST em vez de GET — endpoint GET foi descontinuado (erro 410)
+    const res = await fetch(`/api/jira/rest/api/3/search`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        jql: `project = ${project} ORDER BY created DESC`,
+        startAt,
+        maxResults: 100,
+        fields: fieldIds,
+      }),
+    });
     if (!res.ok) throw new Error(`Erro na busca (${res.status})`);
     const data = await res.json();
     total = data.total;
@@ -86,10 +95,10 @@ async function fetchJiraTickets({ email, token, project, maxResults }) {
       id: i.key, title: i.fields.summary || "",
       status: i.fields.status?.name || "—",
       created: (i.fields.created || "").slice(0, 10),
-      name: fNome ? str(i.fields[fNome]) : "",
-      phone: fTel  ? str(i.fields[fTel])  : "",
-      cnpj:  fCnpj ? str(i.fields[fCnpj]) : "",
-      anydesk: fAny ? str(i.fields[fAny]) : "",
+      name:    fNome ? str(i.fields[fNome]) : "",
+      phone:   fTel  ? str(i.fields[fTel])  : "",
+      cnpj:    fCnpj ? str(i.fields[fCnpj]) : "",
+      anydesk: fAny  ? str(i.fields[fAny])  : "",
     })),
     fieldMap: { fNome, fTel, fCnpj, fAny },
     total,
@@ -306,4 +315,3 @@ export default function App() {
     </div>
   );
 }
-
