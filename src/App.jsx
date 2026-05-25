@@ -102,18 +102,10 @@ async function fetchJiraTickets({ email, token, project, maxResults }) {
 
   let allIssues = [], startAt = 0, total = Infinity;
   while (allIssues.length < maxResults && allIssues.length < total) {
-    // POST em vez de GET — endpoint GET foi descontinuado (erro 410)
-    const res = await fetch(`/api/jira/rest/api/3/search/jql`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        jql: `project = ${project} ORDER BY created DESC`,
-        startAt: startAt,
-        maxResults: 100,
-        fields: fieldIds,
-        fieldsByKeys: false,
-      }),
-    });
+    const fieldsParam = fieldIds.join(",");
+    const jql = encodeURIComponent(`project = ${project} ORDER BY created DESC`);
+    const url = `/api/jira/rest/api/3/search/jql?jql=${jql}&startAt=${startAt}&maxResults=100&fields=${fieldsParam}`;
+    const res = await fetch(url, { method: "GET", headers });
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
       throw new Error(`Erro na busca (${res.status}): ${JSON.stringify(errData?.errorMessages || errData?.errors || '')}`);
