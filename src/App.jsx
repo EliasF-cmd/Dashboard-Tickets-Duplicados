@@ -108,12 +108,16 @@ async function fetchJiraTickets({ email, token, project, maxResults }) {
       headers,
       body: JSON.stringify({
         jql: `project = ${project} ORDER BY created DESC`,
-        startAt,
+        startAt: startAt,
         maxResults: 100,
         fields: fieldIds,
+        fieldsByKeys: false,
       }),
     });
-    if (!res.ok) throw new Error(`Erro na busca (${res.status})`);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(`Erro na busca (${res.status}): ${JSON.stringify(errData?.errorMessages || errData?.errors || '')}`);
+    }
     const data = await res.json();
     total = data.total;
     allIssues.push(...data.issues);
