@@ -1,6 +1,5 @@
 import { useState, useMemo } from "react";
 
-// ─── helpers ────────────────────────────────────────────────────────────────
 const normalizeCNPJ  = (v = "") => v.replace(/\D/g, "").trim();
 const normalizePhone = (v = "") => v.replace(/\D/g, "").replace(/^0+/, "").slice(-9);
 const normalizeName  = (v = "") =>
@@ -41,14 +40,47 @@ const groupTickets = (tickets) => {
     for (let j = i + 1; j < tickets.length; j++) {
       if (assigned.has(j)) continue;
       const r = sameClient(tickets[i], tickets[j]);
-      if (r.match) { group.tickets.push(tickets[j]); if (!group.reasons.includes(r.reason)) group.reasons.push(r.reason); assigned.add(j); }
+      if (r.match) {
+        group.tickets.push(tickets[j]);
+        if (!group.reasons.includes(r.reason)) group.reasons.push(r.reason);
+        assigned.add(j);
+      }
     }
     groups.push(group);
   }
   return groups.sort((a, b) => b.tickets.length - a.tickets.length);
 };
 
-// ─── Jira API via /api/jira proxy ────────────────────────────────────────
+const SC = { "em andamento":"#60a5fa", aguardando:"#f59e0b", aberto:"#f59e0b", resolvido:"#22c55e", fechado:"#22c55e" };
+const sColor = (s="") => { const k = Object.keys(SC).find(k=>s.toLowerCase().includes(k)); return SC[k]||"#475569"; };
+
+const inputStyle = { background:"#0a1628", border:"1px solid #1e3a5f", borderRadius:8, padding:"8px 12px", color:"#e2e8f0", fontSize:13, width:"100%", outline:"none", boxSizing:"border-box" };
+const Badge     = ({children,color}) => <span style={{background:color,color:"#fff",borderRadius:4,padding:"2px 8px",fontSize:11,fontWeight:700}}>{children}</span>;
+const ReasonTag = ({label}) => <span style={{background:"#1e3a5f",color:"#93c5fd",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:600}}>{label}</span>;
+const Info      = ({label,value}) => !value?null:<span style={{fontSize:11}}><span style={{color:"#64748b",marginRight:4}}>{label}:</span><span style={{color:"#cbd5e1"}}>{value}</span></span>;
+const Field     = ({label,value,onChange,placeholder,type="text"}) => (
+  <div><label style={{fontSize:12,color:"#64748b",display:"block",marginBottom:4}}>{label}</label>
+  <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={inputStyle}/></div>
+);
+
+const TicketCard = ({ticket}) => (
+  <div style={{background:"#0f1929",border:"1px solid #1e3a5f",borderRadius:8,padding:"10px 14px"}}>
+    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
+      <a href={`https://wmi-solutions.atlassian.net/browse/${ticket.id}`} target="_blank" rel="noreferrer"
+        style={{color:"#60a5fa",fontSize:11,fontWeight:700,fontFamily:"monospace",textDecoration:"none"}}>{ticket.id} ↗</a>
+      <Badge color={sColor(ticket.status)}>{ticket.status}</Badge>
+      {ticket.created && <span style={{color:"#475569",fontSize:11}}>{ticket.created}</span>}
+    </div>
+    <div style={{color:"#e2e8f0",fontSize:13,fontWeight:500,marginBottom:6}}>{ticket.title}</div>
+    <div style={{display:"flex",flexWrap:"wrap",gap:12}}>
+      <Info label="Nome" value={ticket.name}/>
+      <Info label="CNPJ" value={ticket.cnpj}/>
+      <Info label="Telefone" value={ticket.phone}/>
+      <Info label="Anydesk" value={ticket.anydesk}/>
+    </div>
+  </div>
+);
+
 async function fetchJiraTickets({ email, token, project, maxResults }) {
   const auth = "Basic " + btoa(`${email}:${token}`);
   const headers = { "x-jira-auth": auth, "Content-Type": "application/json" };
@@ -70,8 +102,8 @@ async function fetchJiraTickets({ email, token, project, maxResults }) {
 
   let allIssues = [], startAt = 0, total = Infinity;
   while (allIssues.length < maxResults && allIssues.length < total) {
-    // USA POST em vez de GET — endpoint GET foi descontinuado (erro 410)
-    const res = await fetch(`/api/jira/rest/api/3/search`, {
+    // POST em vez de GET — endpoint GET foi descontinuado (erro 410)
+    const res = await fetch(`/api/jira/rest/api/3/search/jql`, {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -105,36 +137,6 @@ async function fetchJiraTickets({ email, token, project, maxResults }) {
   };
 }
 
-// ─── UI ──────────────────────────────────────────────────────────────────────
-const SC = { "em andamento":"#60a5fa", aguardando:"#f59e0b", aberto:"#f59e0b", resolvido:"#22c55e", fechado:"#22c55e" };
-const sColor = (s="") => { const k = Object.keys(SC).find(k=>s.toLowerCase().includes(k)); return SC[k]||"#475569"; };
-
-const inputStyle = { background:"#0a1628", border:"1px solid #1e3a5f", borderRadius:8, padding:"8px 12px", color:"#e2e8f0", fontSize:13, width:"100%", outline:"none", boxSizing:"border-box" };
-const Badge     = ({children,color}) => <span style={{background:color,color:"#fff",borderRadius:4,padding:"2px 8px",fontSize:11,fontWeight:700}}>{children}</span>;
-const ReasonTag = ({label}) => <span style={{background:"#1e3a5f",color:"#93c5fd",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:600}}>{label}</span>;
-const Info      = ({label,value}) => !value?null:<span style={{fontSize:11}}><span style={{color:"#64748b",marginRight:4}}>{label}:</span><span style={{color:"#cbd5e1"}}>{value}</span></span>;
-const Field     = ({label,value,onChange,placeholder,type="text"}) => (
-  <div><label style={{fontSize:12,color:"#64748b",display:"block",marginBottom:4}}>{label}</label>
-  <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={inputStyle}/></div>
-);
-
-const TicketCard = ({ticket}) => (
-  <div style={{background:"#0f1929",border:"1px solid #1e3a5f",borderRadius:8,padding:"10px 14px"}}>
-    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
-      <a href={`https://wmi-solutions.atlassian.net/browse/${ticket.id}`} target="_blank" rel="noreferrer"
-        style={{color:"#60a5fa",fontSize:11,fontWeight:700,fontFamily:"monospace",textDecoration:"none"}}>{ticket.id} ↗</a>
-      <Badge color={sColor(ticket.status)}>{ticket.status}</Badge>
-      {ticket.created && <span style={{color:"#475569",fontSize:11}}>{ticket.created}</span>}
-    </div>
-    <div style={{color:"#e2e8f0",fontSize:13,fontWeight:500,marginBottom:6}}>{ticket.title}</div>
-    <div style={{display:"flex",flexWrap:"wrap",gap:12}}>
-      <Info label="Nome" value={ticket.name}/><Info label="CNPJ" value={ticket.cnpj}/>
-      <Info label="Telefone" value={ticket.phone}/><Info label="Anydesk" value={ticket.anydesk}/>
-    </div>
-  </div>
-);
-
-// ─── Main App ─────────────────────────────────────────────────────────────
 export default function App() {
   const [tab,      setTab]      = useState("connect");
   const [email,    setEmail]    = useState("");
@@ -169,8 +171,6 @@ export default function App() {
 
   return (
     <div style={{minHeight:"100vh",background:"#060d1a",color:"#e2e8f0",fontFamily:"'Segoe UI',sans-serif"}}>
-
-      {/* header */}
       <div style={{background:"#0a1628",borderBottom:"1px solid #1e3a5f",padding:"0 24px"}}>
         <div style={{maxWidth:1100,margin:"0 auto",display:"flex",alignItems:"center",gap:16,height:56,flexWrap:"wrap"}}>
           <span style={{fontSize:18,fontWeight:800,color:"#60a5fa"}}>🎫 Jira · Deduplicador de Clientes</span>
@@ -188,8 +188,6 @@ export default function App() {
       </div>
 
       <div style={{maxWidth:1100,margin:"0 auto",padding:"28px 16px",width:"100%"}}>
-
-        {/* ── CONNECT ── */}
         {tab==="connect" && (
           <div style={{maxWidth:500}}>
             <h2 style={{color:"#93c5fd",fontWeight:800,margin:"0 0 4px"}}>Conectar ao Jira</h2>
@@ -207,26 +205,22 @@ export default function App() {
                 <Field label="Máx. tickets" value={maxRes} onChange={setMaxRes} placeholder="500"/>
               </div>
             </div>
-
             {error && (
               <div style={{background:"#450a0a",border:"1px solid #f87171",borderRadius:8,padding:"10px 14px",color:"#fca5a5",fontSize:13,marginTop:16}}>
                 ⚠️ {error}
               </div>
             )}
-
             <div style={{marginTop:14,background:"#0a1f3a",border:"1px solid #1e3a5f",borderRadius:8,padding:"12px 14px"}}>
               <div style={{fontSize:12,color:"#64748b",fontWeight:600,marginBottom:4}}>🔒 Segurança</div>
               <div style={{fontSize:12,color:"#475569",lineHeight:1.6}}>
                 Suas credenciais trafegam apenas entre o seu navegador e o servidor Render (HTTPS). O servidor faz a chamada ao Jira. Nenhum dado é armazenado.
               </div>
             </div>
-
             <button onClick={handleFetch} disabled={loading||!email||!token}
               style={{marginTop:16,background:loading?"#1e3a5f":"#1d4ed8",color:"#fff",border:"none",borderRadius:8,
                 padding:"12px 28px",fontWeight:700,fontSize:14,cursor:loading||!email||!token?"not-allowed":"pointer",width:"100%"}}>
               {loading?"⏳ Buscando tickets...":"🚀 Buscar e Analisar"}
             </button>
-
             {fieldMap && (
               <div style={{marginTop:16,background:"#0a1628",border:"1px solid #1e3a5f",borderRadius:8,padding:"12px 14px"}}>
                 <div style={{fontSize:12,color:"#64748b",fontWeight:600,marginBottom:8}}>Campos detectados automaticamente:</div>
@@ -242,7 +236,6 @@ export default function App() {
           </div>
         )}
 
-        {/* ── DASHBOARD ── */}
         {tab==="dashboard" && (
           <>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12,marginBottom:24}}>
@@ -258,7 +251,6 @@ export default function App() {
                 </div>
               ))}
             </div>
-
             <div style={{display:"flex",gap:10,marginBottom:16,alignItems:"center"}}>
               <input placeholder="Filtrar por nome, CNPJ, telefone ou ticket…" value={filter} onChange={e=>setFilter(e.target.value)}
                 style={{...inputStyle,flex:1,padding:"8px 14px"}}/>
@@ -267,9 +259,7 @@ export default function App() {
                 🔄 Atualizar
               </button>
             </div>
-
             {filtered.length===0 && <div style={{color:"#64748b",textAlign:"center",padding:40}}>Nenhum grupo duplicado encontrado.</div>}
-
             {filtered.map((group,idx)=>{
               const lead=group.tickets[0], open=expanded[idx];
               return (
@@ -298,7 +288,6 @@ export default function App() {
                 </div>
               );
             })}
-
             {soloGroups.length>0&&(
               <details style={{marginTop:8}}>
                 <summary style={{cursor:"pointer",color:"#64748b",fontSize:13,padding:"8px 0"}}>
